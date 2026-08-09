@@ -30,6 +30,7 @@ const AUTOMATE_GODOT := "res://addons/automate_godot/terrain/bench_rules.gd"
 
 const CONFIG := preload("res://addons/site_prospector/assistant_config.gd")
 
+var _dock_root: ScrollContainer
 var _dock: VBoxContainer
 var _status: Label
 var _kept: Label
@@ -46,14 +47,34 @@ var _assistant_status: Label
 func _enter_tree() -> void:
 	_declare_settings()
 	_build_dock()
-	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
+	# **The scroll container is what pins the width.**
+	#
+	# An autowrap `Label` with no width to wrap against reports its unwrapped
+	# line as its minimum width. In a container that sizes to its content that
+	# is a feedback loop: the label asks for more, the dock grows, the label
+	# asks for more. It ran away far enough that the editor tried to allocate a
+	# render target past the GPU's maximum texture size and failed - every
+	# frame, thousands of times - and the dock it lived in squeezed the
+	# FileSystem panel out of the layout entirely.
+	#
+	# Disabling horizontal scrolling gives every child a fixed width to wrap
+	# against, which ends the loop. The panel is long enough to want scrolling
+	# regardless.
+	_dock_root = ScrollContainer.new()
+	_dock_root.name = "Site Prospector"
+	_dock_root.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_dock.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_dock_root.add_child(_dock)
+	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock_root)
 	_check_dependencies()
 
 
 func _exit_tree() -> void:
-	if _dock != null:
-		remove_control_from_docks(_dock)
-		_dock.queue_free()
+	if _dock_root != null:
+		remove_control_from_docks(_dock_root)
+		_dock_root.queue_free()
+		_dock_root = null
 		_dock = null
 
 
@@ -145,6 +166,8 @@ func _build_dock() -> void:
 	blurb.text = "Ground is authored once over kilometres. A level is a " \
 		+ "rectangle cut from it. Choose the rectangle."
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size = Vector2(1, 0)
+	blurb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blurb.add_theme_color_override("font_color", Color(0.6, 0.65, 0.7))
 	_dock.add_child(blurb)
 
@@ -157,6 +180,8 @@ func _build_dock() -> void:
 
 	_kept = Label.new()
 	_kept.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_kept.custom_minimum_size = Vector2(1, 0)
+	_kept.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_dock.add_child(_kept)
 
 	var apply := Button.new()
@@ -172,6 +197,8 @@ func _build_dock() -> void:
 	optional.text = "Optional: sweep the region and rank candidates by " \
 		+ "contours crossed. Takes about a minute."
 	optional.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	optional.custom_minimum_size = Vector2(1, 0)
+	optional.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	optional.add_theme_color_override("font_color", Color(0.55, 0.6, 0.65))
 	_dock.add_child(optional)
 
@@ -182,6 +209,8 @@ func _build_dock() -> void:
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.custom_minimum_size = Vector2(1, 0)
+	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status.add_theme_color_override("font_color", Color(0.6, 0.65, 0.7))
 	_dock.add_child(_status)
 
@@ -209,6 +238,8 @@ func _build_assistant_controls() -> void:
 	blurb.text = "A locally hosted model proposes landform parameters and " \
 		+ "reads a survey back. Everything here works without one."
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size = Vector2(1, 0)
+	blurb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blurb.add_theme_color_override("font_color", Color(0.55, 0.6, 0.65))
 	_dock.add_child(blurb)
 
@@ -239,6 +270,8 @@ func _build_assistant_controls() -> void:
 
 	_assistant_status = Label.new()
 	_assistant_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_assistant_status.custom_minimum_size = Vector2(1, 0)
+	_assistant_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_assistant_status.add_theme_color_override(
 		"font_color", Color(0.55, 0.6, 0.65))
 	_dock.add_child(_assistant_status)
