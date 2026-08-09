@@ -62,6 +62,19 @@ extends Node3D
 ## Terrain3D samples one height per vertex; at spacing 1.0 a vertex is a
 ## terrain cell, which is the lattice the design settled on.
 const VERTEX_SPACING := 1.0
+
+## Terrain3D's region grid, in metres.
+##
+## **Not tunable here, which is worth recording.** An import has to start on a
+## region boundary, so at 256 a board 108 x 204 with 120 m of margin - about
+## 348 x 444 of actual need - is rounded out to nine regions and 768 x 768:
+## twenty-seven times the board, every metre of it sampled and shaped.
+##
+## Smaller regions would hug the requirement, but Terrain3D ignores the
+## property once its data exists; changing it means `Terrain3DData.
+## change_region_size` before anything is imported. Worth doing when the
+## rebuild cost matters again - it is roughly a 40% saving - and not worth it
+## while the rebuild is half a second.
 const REGION_SIZE := 256
 
 ## Metres over which the filled board eases back to bare terrain outside it.
@@ -248,6 +261,13 @@ func set_grader(grader: Node) -> void:
 
 func _queue_rebuild() -> void:
 	if not is_inside_tree():
+		return
+	# **Only the editor waits.** Debouncing is for a designer dragging a value;
+	# at load it delayed the rebuild that adds the fill until after the level
+	# had spawned bodies onto the bare landform, and the hero came to rest 0.2 m
+	# out. In game the ground has to be right before anything stands on it.
+	if not Engine.is_editor_hint():
+		_rebuild()
 		return
 	_rebuild_requested = true
 	if _pending:
