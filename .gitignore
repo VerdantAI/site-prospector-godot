@@ -11,3 +11,6 @@ Thumbs.db
 
 # The required dependency, installed rather than vendored.
 addons/automate_godot/
+
+# Per-machine assistant setup. Written by the dock; never committed.
+site_prospector.local.cfg

@@ -1,0 +1,14 @@
+; Copy to `site_prospector.local.cfg` (gitignored) or write it from the dock.
+;
+; This file is read by headless tool runs, where editor settings do not exist.
+; Resolution order: environment > this file > editor settings > defaults.
+;
+; Never put a credential here. Name the environment variable holding it
+; instead - this file is plain text beside your project.
+
+[assistant]
+
+enabled=false
+host="http://localhost:11434"
+model="qwen3:8b"
+key_variable=""

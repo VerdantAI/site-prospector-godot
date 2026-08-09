@@ -106,7 +106,20 @@ than a filing preference.
 | Home | Scope | Committed | Holds |
 | --- | --- | --- | --- |
 | **Project Settings** | The project | Yes, in `project.godot` | `site_prospector/prospect_scene`, `site_prospector/chosen_site` |
-| **Editor Settings** | The developer, every project | No, in `~/.config` | `site_prospector/assistant/host`, `.../model`, `.../enabled` |
+| **Editor Settings** | The developer, every project | No, in `~/.config` | Assistant host, model, enabled |
+| **Local file** | This project, this machine | **No** — gitignored | The same, when a headless run needs them |
+| **Environment** | Whatever set it | No | Credentials, and CI |
+
+Resolution is most specific first: **environment → local file → editor settings
+→ default**, and the dock says which one a value came from, because a setting
+edited in the wrong scope looks exactly like one that did not save.
+
+**The local file exists because editor settings are not reachable headless.**
+Every tool this addon ships runs as `godot --headless --script`, where there is
+no editor — so setup kept only in editor settings would be invisible to exactly
+the batch jobs most likely to want it. Copy
+`site_prospector.local.cfg.example`, or press **Save for this project** in the
+dock.
 
 **What every teammate must agree on goes in the project.** Which scene is this
 project's map is a fact about the project, and a checkout without it is broken.
@@ -117,9 +130,9 @@ everyone else on their team. Committing one person's `localhost:11434` to a
 shared `project.godot` makes the file churn on every machine and be right on
 none of them.
 
-**A credential belongs in neither.** Both settings files are plain text on
-disk and one of them is in git. When hosted endpoints are supported, the key
-comes from an environment variable and only the variable's *name* is recorded.
+**A credential belongs in none of them.** Every settings file here is plain
+text on disk and one of them is in git. A key is read from an environment
+variable, and only the variable's *name* is ever recorded.
 
 ## Demo
 

@@ -28,12 +28,19 @@ const RENDER_REGION_MAP := \
 ## Required. Benching, fill depth and earthwork all come from it.
 const AUTOMATE_GODOT := "res://addons/automate_godot/terrain/bench_rules.gd"
 
+const CONFIG := preload("res://addons/site_prospector/assistant_config.gd")
+
 var _dock: VBoxContainer
 var _status: Label
 var _kept: Label
 var _watchdog: Timer
 var _running_pid: int = -1
 var _running_seconds := 0.0
+var _assistant_enabled: CheckBox
+var _assistant_host: LineEdit
+var _assistant_model: LineEdit
+var _assistant_key: LineEdit
+var _assistant_status: Label
 
 
 func _enter_tree() -> void:
@@ -178,7 +185,130 @@ func _build_dock() -> void:
 	_status.add_theme_color_override("font_color", Color(0.6, 0.65, 0.7))
 	_dock.add_child(_status)
 
+	_dock.add_child(HSeparator.new())
+	_build_assistant_controls()
+
 	_refresh_kept()
+
+
+## The assistant's setup, editable here.
+##
+## **Files are the mechanism; this is the interface.** Configuration resolves
+## from the environment, then a gitignored local file, then editor settings -
+## which is what lets a headless tool and a CI run see it - but nobody should
+## have to open a `.cfg` to point the addon at a model. Each field says where
+## its current value came from, because a setting edited in the wrong scope
+## looks exactly like a setting that did not save.
+func _build_assistant_controls() -> void:
+	var heading := Label.new()
+	heading.text = "Assistant (optional)"
+	heading.add_theme_font_size_override("font_size", 14)
+	_dock.add_child(heading)
+
+	var blurb := Label.new()
+	blurb.text = "A locally hosted model proposes landform parameters and " \
+		+ "reads a survey back. Everything here works without one."
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.add_theme_color_override("font_color", Color(0.55, 0.6, 0.65))
+	_dock.add_child(blurb)
+
+	_assistant_enabled = CheckBox.new()
+	_assistant_enabled.text = "Use a model"
+	_dock.add_child(_assistant_enabled)
+
+	_assistant_host = _labelled_field("Host", CONFIG.HOST)
+	_assistant_model = _labelled_field("Model", CONFIG.MODEL)
+	_assistant_key = _labelled_field("Key variable", CONFIG.KEY_VARIABLE)
+	_assistant_key.tooltip_text = "Name of an environment variable holding a " \
+		+ "credential. The key itself is never stored - both settings files " \
+		+ "are plain text and one of them is in git."
+
+	var buttons := HBoxContainer.new()
+	var save_global := Button.new()
+	save_global.text = "Save for me"
+	save_global.tooltip_text = "Editor settings: this developer, every project."
+	save_global.pressed.connect(_on_save_assistant.bind(false))
+	buttons.add_child(save_global)
+	var save_local := Button.new()
+	save_local.text = "Save for this project"
+	save_local.tooltip_text = "A gitignored file beside the project, which a " \
+		+ "headless tool run can also read."
+	save_local.pressed.connect(_on_save_assistant.bind(true))
+	buttons.add_child(save_local)
+	_dock.add_child(buttons)
+
+	_assistant_status = Label.new()
+	_assistant_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_assistant_status.add_theme_color_override(
+		"font_color", Color(0.55, 0.6, 0.65))
+	_dock.add_child(_assistant_status)
+
+	_load_assistant()
+
+
+func _labelled_field(caption: String, key: String) -> LineEdit:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = caption
+	label.custom_minimum_size = Vector2(84, 0)
+	row.add_child(label)
+	var field := LineEdit.new()
+	field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	field.set_meta("setting_key", key)
+	row.add_child(field)
+	_dock.add_child(row)
+	return field
+
+
+func _load_assistant() -> void:
+	_assistant_enabled.button_pressed = bool(CONFIG.get_value(CONFIG.ENABLED))
+	_assistant_host.text = str(CONFIG.get_value(CONFIG.HOST))
+	_assistant_model.text = str(CONFIG.get_value(CONFIG.MODEL))
+	_assistant_key.text = str(CONFIG.get_value(CONFIG.KEY_VARIABLE))
+	var sources: Array[String] = []
+	for key in [CONFIG.ENABLED, CONFIG.HOST, CONFIG.MODEL]:
+		sources.append("%s: %s" % [key, CONFIG.source_of(key)])
+	_assistant_status.text = ", ".join(sources)
+
+
+## Write the fields to one scope, and say which.
+##
+## Environment beats both, so an overridden field is reported rather than
+## silently accepted - a value that will not take effect looks identical to one
+## that did not save.
+func _on_save_assistant(local: bool) -> void:
+	var values := {
+		CONFIG.ENABLED: _assistant_enabled.button_pressed,
+		CONFIG.HOST: _assistant_host.text.strip_edges(),
+		CONFIG.MODEL: _assistant_model.text.strip_edges(),
+		CONFIG.KEY_VARIABLE: _assistant_key.text.strip_edges(),
+	}
+	if local:
+		var file := ConfigFile.new()
+		file.load(CONFIG.LOCAL_FILE)
+		for key in values:
+			file.set_value(CONFIG.SECTION, key, values[key])
+		var error := file.save(CONFIG.LOCAL_FILE)
+		if error != OK:
+			_assistant_status.text = "Could not write %s: %s" % [
+				CONFIG.LOCAL_FILE, error_string(error)]
+			return
+	else:
+		var editor := get_editor_interface().get_editor_settings()
+		if editor == null:
+			_assistant_status.text = "No editor settings available."
+			return
+		for key in values:
+			editor.set_setting(CONFIG.EDITOR_PREFIX + key, values[key])
+
+	var overridden: Array[String] = []
+	for key in values:
+		if CONFIG.source_of(key) == "environment":
+			overridden.append(key)
+	_load_assistant()
+	if not overridden.is_empty():
+		_assistant_status.text += "  -  %s still comes from the environment." \
+			% ", ".join(overridden)
 
 
 func _on_open_map() -> void:
