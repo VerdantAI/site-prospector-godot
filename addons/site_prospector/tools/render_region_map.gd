@@ -100,9 +100,36 @@ const ISOCLINE_INTERVAL := 2.0
 ## and nothing to excavate.
 const MIN_RELIEF := 4.0
 
-## A stream is hoped for, not required. It earns its place in the score, but a
-## flat site without one still beats a broken site with one.
-const STREAM_LOTS := 6
+## Drainage a site must carry to be ranked at all.
+##
+## **It was a bonus and had to become a gate.** A channel adds contour
+## crossings, which lowers the flatness term carrying 0.55 of the score, while
+## drainage earned at most 0.20 - so the very feature the sweep selects for
+## cost more than it paid, and every ranking came back "100% buildable, no
+## drainage". The survey already calls that a failure; a sweep should not rank
+## failures.
+const MIN_DRAINAGE_LOTS := 5
+
+## Drainage above which the bonus is saturated.
+const STREAM_LOTS := 14
+
+## Metres below its neighbours' mean before a lot counts as drainage, quoted
+## at a 12 m sample spacing.
+##
+## **Set above the terrain's own roughness, not just above zero.** At 0.35 m
+## this counted noise: a fan surface with a few metres of undulation produces
+## 0.3-0.6 m of local variation over 12 m, so nearly half a board registered as
+## drainage and the ranking filled with flat ground pretending to have
+## channels. An incised arroyo drops over a metre across the same span, so the
+## threshold belongs between the two.
+##
+## **Scaled by the step, because curvature is not scale-free.** Sampled at 6 m
+## the same channel shows half the drop it shows at 12, so an absolute
+## threshold made the fine verification reject everything the coarse sweep
+## found - all twenty-four leaders, which looked like barren ground and was
+## actually two passes measuring different things.
+const CHANNEL_DEPTH := 0.8
+const CHANNEL_DEPTH_STEP := 12.0
 
 ## Orientations tried per site, in degrees. **The rectangle is not portrait.**
 ## It sits at whatever angle the ground rewards - the level is then rotated to
@@ -276,13 +303,24 @@ func _assess(landform: Resource, origin: Vector2, angle: float,
 			lots += 1
 			if grade <= MAX_GRADE:
 				buildable += 1
-			elif grade > MAX_GRADE * 2.0:
+			# **A channel is a low line, not a steep one.** This counted
+			# drainage by steepness, so the sweep undercounted the one feature
+			# it selects for - and the range front, which is steep and is not
+			# drainage, counted instead. Curvature is the test the drag survey
+			# already uses; the two now agree.
+			var behind := float(landform.height_at(
+				point.x - forward.x * step, point.y - forward.y * step))
+			var opposite := float(landform.height_at(
+				point.x - side.x * step, point.y - side.y * step))
+			if here < (ahead + behind + beside + opposite) * 0.25 \
+					- CHANNEL_DEPTH * (step / CHANNEL_DEPTH_STEP):
 				cut += 1
 			across += step
 		along += step
 	var fraction := float(buildable) / float(maxi(lots, 1))
 	var relief := highest - lowest
-	if relief > MAX_RELIEF or relief < MIN_RELIEF or fraction < MIN_BUILDABLE:
+	if relief > MAX_RELIEF or relief < MIN_RELIEF or fraction < MIN_BUILDABLE \
+			or cut < MIN_DRAINAGE_LOTS:
 		return {}
 	return {
 		"x": origin.x, "z": origin.y, "angle": rad_to_deg(angle),
@@ -301,7 +339,7 @@ func _score(buildable: float, cut: int, crossings: int, lots: int) -> float:
 	var plat := clampf(buildable, 0.0, 1.0)
 	# A stream, if one happens to run through it.
 	var stream := clampf(float(cut) / float(STREAM_LOTS), 0.0, 1.0)
-	return flat * 0.55 + plat * 0.25 + stream * 0.20
+	return flat * 0.40 + plat * 0.25 + stream * 0.35
 
 
 func _write_height_map(heights: PackedFloat32Array, width: int, height: int,

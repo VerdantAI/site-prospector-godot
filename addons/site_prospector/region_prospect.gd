@@ -84,9 +84,11 @@ var board_extent: Vector2:
 		cell_size = maxf(value, 1.0)
 		_restate()
 
-## Metres below its neighbours' mean before a lot counts as drainage. Small,
-## because a fan's channels are shallow and still carry all the water.
-@export var channel_depth_threshold: float = 0.35:
+## Metres below its neighbours' mean before a lot counts as drainage, at one
+## lot's spacing. Set above the terrain's own roughness: a few metres of
+## undulation makes half a metre of local variation over a 12 m lot, and
+## counting that as drainage reports channels where there is only texture.
+@export var channel_depth_threshold: float = 0.8:
 	set(value):
 		channel_depth_threshold = maxf(value, 0.01)
 		_restate()

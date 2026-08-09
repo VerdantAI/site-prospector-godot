@@ -85,6 +85,21 @@ class_name RegionLandform
 ## How far the channel wanders across the fan over its length.
 @export var arroyo_wander: float = 190.0
 
+## How much of its depth an arroyo keeps by the toe of the fan.
+##
+## **This is the number that decided whether a level could be interesting.**
+## It was implicitly 0.28 - channels lost nearly three quarters of their
+## incision downslope - so by the time the fan was gentle enough to build on
+## there was nothing cutting it, and every prospected site came back "100%
+## buildable, no drainage": an unbroken grid on flat ground, the level this
+## whole toolkit exists to avoid.
+##
+## Real fans do shallow downslope, but their channels persist: Eaton Wash is
+## incised the whole way to the valley floor. Keeping most of the depth is
+## both truer and the difference between ground with a reason for a street to
+## stop and ground without one.
+@export_range(0.0, 1.0, 0.01) var arroyo_persistence: float = 0.72
+
 @export_group("Texture")
 ## Gentle undulation so the fans are not glass. Real fan surfaces carry old
 ## abandoned channels and low interfluves.
@@ -167,7 +182,7 @@ func _arroyo_cut(x: float, z: float) -> float:
 		var profile := exp(-(across * across)
 			/ (2.0 * arroyo_width * arroyo_width))
 		# Shallowing downslope, as the channel loses its confinement.
-		var depth := arroyo_depth * (1.0 - along * 0.72)
+		var depth := arroyo_depth * lerpf(1.0, arroyo_persistence, along)
 		deepest = maxf(deepest, depth * profile)
 	return deepest
 
