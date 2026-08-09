@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_msq1j")
 origin = Vector2(417, 378)
-relief = 10.34746918880144
+relief = 10.432738180152477
 buildable = 0.7843137254901961
-drainage_lots = 13
+drainage_lots = 9
 verdict = "good ground"

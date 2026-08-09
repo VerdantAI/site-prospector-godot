@@ -8,9 +8,15 @@ extends EditorPlugin
 ## candidates, and hands the chosen site to whatever the host project uses -
 ## which is one `RegionWindow` node, and nothing else about the host.
 
-const PROSPECT_SCENE := "res://addons/site_prospector/region_prospect.gd"
-const DEMO_SCENE := "res://demo/prospect_demo.tscn"
-const CHOSEN_SITE_PATH := "res://chosen_site.tres"
+## Where this project keeps its prospect scene and its kept site.
+##
+## **Settings, not constants.** The addon shipped pointing at its own demo, so
+## every host either kept its map at `res://demo/` or found the button broken.
+## A project declares where its things live; an addon does not get to decide.
+const SETTING_SCENE := "site_prospector/prospect_scene"
+const SETTING_CHOSEN := "site_prospector/chosen_site"
+const DEFAULT_SCENE := "res://demo/prospect_demo.tscn"
+const DEFAULT_CHOSEN := "res://chosen_site.tres"
 const RENDER_REGION_MAP := \
 	"res://addons/site_prospector/tools/render_region_map.gd"
 
@@ -26,6 +32,7 @@ var _running_seconds := 0.0
 
 
 func _enter_tree() -> void:
+	_declare_settings()
 	_build_dock()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
 	_check_dependencies()
@@ -36,6 +43,28 @@ func _exit_tree() -> void:
 		remove_control_from_docks(_dock)
 		_dock.queue_free()
 		_dock = null
+
+
+## Declare the settings so they appear in Project Settings rather than having
+## to be guessed at or typed blind.
+func _declare_settings() -> void:
+	for setting in [[SETTING_SCENE, DEFAULT_SCENE], [SETTING_CHOSEN,
+			DEFAULT_CHOSEN]]:
+		if not ProjectSettings.has_setting(setting[0]):
+			ProjectSettings.set_setting(setting[0], setting[1])
+		ProjectSettings.set_initial_value(setting[0], setting[1])
+		ProjectSettings.add_property_info({
+			"name": setting[0], "type": TYPE_STRING,
+			"hint": PROPERTY_HINT_FILE,
+		})
+
+
+func prospect_scene() -> String:
+	return str(ProjectSettings.get_setting(SETTING_SCENE, DEFAULT_SCENE))
+
+
+func chosen_site_path() -> String:
+	return str(ProjectSettings.get_setting(SETTING_CHOSEN, DEFAULT_CHOSEN))
 
 
 ## Say plainly what is missing, rather than failing somewhere deeper.
@@ -108,11 +137,13 @@ func _build_dock() -> void:
 
 
 func _on_open_map() -> void:
-	if not FileAccess.file_exists(DEMO_SCENE):
-		_status.text = "No prospect scene at %s. Make one with a " % DEMO_SCENE \
-			+ "RegionProspect root and a Site child."
+	var scene := prospect_scene()
+	if not FileAccess.file_exists(scene):
+		_status.text = "No prospect scene at %s. Make one with a " % scene \
+			+ "RegionProspect root and a Site child, or point " \
+			+ "site_prospector/prospect_scene at yours."
 		return
-	get_editor_interface().open_scene_from_path(DEMO_SCENE)
+	get_editor_interface().open_scene_from_path(scene)
 	# A Node2D root opened while the editor is on 3D shows an empty viewport,
 	# which reads as the button having done nothing.
 	get_editor_interface().set_main_screen_editor("2D")
@@ -122,21 +153,21 @@ func _on_open_map() -> void:
 func _refresh_kept() -> void:
 	if _kept == null:
 		return
-	if not ResourceLoader.exists(CHOSEN_SITE_PATH):
+	if not ResourceLoader.exists(chosen_site_path()):
 		_kept.text = "No site kept yet."
 		return
-	var chosen: Resource = load(CHOSEN_SITE_PATH)
+	var chosen: Resource = load(chosen_site_path())
 	_kept.text = "No site kept yet." if chosen == null \
 		else "Kept: %s" % chosen.call("describe")
 
 
 func _on_apply() -> void:
 	_refresh_kept()
-	if not ResourceLoader.exists(CHOSEN_SITE_PATH):
+	if not ResourceLoader.exists(chosen_site_path()):
 		_status.text = "Nothing kept. Drag the site, then tick 'keep this " \
 			+ "site' in the Inspector."
 		return
-	var chosen: Resource = load(CHOSEN_SITE_PATH)
+	var chosen: Resource = load(chosen_site_path())
 	var root := get_editor_interface().get_edited_scene_root()
 	var window: Node = null if root == null \
 		else root.find_child("RegionWindow", true, false)

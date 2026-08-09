@@ -135,7 +135,14 @@ var board_extent: Vector2:
 ## How far the board is turned, in degrees.
 @export var site_angle_degrees: float = 0.0
 
-const CHOSEN_SITE_PATH := "res://chosen_site.tres"
+## Where a kept site is written. Follows the project setting the plugin
+## declares, so the map and the dock cannot disagree about the drop point.
+const SETTING_CHOSEN := "site_prospector/chosen_site"
+const DEFAULT_CHOSEN := "res://chosen_site.tres"
+
+
+static func chosen_site_path() -> String:
+	return str(ProjectSettings.get_setting(SETTING_CHOSEN, DEFAULT_CHOSEN))
 ## **Loaded rather than preloaded, on purpose.** `automate-godot` is required,
 ## but a hard `preload` of a missing file is a parse error, and a parse error
 ## takes the whole addon down with a message about a path rather than about a
@@ -484,9 +491,9 @@ func _save() -> void:
 	chosen.buildable = float(_reading["buildable"])
 	chosen.drainage_lots = int(_reading["drainage"])
 	chosen.verdict = _verdict()
-	var error := ResourceSaver.save(chosen, CHOSEN_SITE_PATH)
+	var error := ResourceSaver.save(chosen, chosen_site_path())
 	if error != OK:
-		push_error("Could not save %s: %s" % [CHOSEN_SITE_PATH,
+		push_error("Could not save %s: %s" % [chosen_site_path(),
 			error_string(error)])
 		return
 	print("Kept: %s" % chosen.describe())
