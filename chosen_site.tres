@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChosenSite" format=3]
+
+[ext_resource type="Script" path="res://addons/site_prospector/chosen_site.gd" id="1_msq1j"]
+
+[resource]
+script = ExtResource("1_msq1j")
+origin = Vector2(417, 378)
+relief = 10.34746918880144
+buildable = 0.7843137254901961
+drainage_lots = 13
+verdict = "good ground"

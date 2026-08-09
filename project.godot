@@ -1,0 +1,22 @@
+; Demo project for the Site Prospector addon.
+;
+; Committed on purpose. An addon repository that cannot be opened in Godot has
+; nowhere to develop or demonstrate itself, and the Asset Library reviewer
+; opens exactly this.
+
+config_version=5
+
+[application]
+
+config/name="Site Prospector"
+config/description="Demo project for the Site Prospector addon."
+run/main_scene="res://demo/prospect_demo.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/site_prospector/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

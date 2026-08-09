@@ -1,8 +1,13 @@
-# Godot project files (not part of the add-on itself)
-project.godot
-*.import
+# Godot's import cache and generated artefacts.
 .godot/
+*.import
 
-# OS generated files
+# Maps the addon renders on demand. Regenerate them; do not commit them.
+demo/generated/
+
+# OS noise
 .DS_Store
 Thumbs.db
+
+# The required dependency, installed rather than vendored.
+addons/automate_godot/
