@@ -1,0 +1,8 @@
+# Godot project files (not part of the add-on itself)
+project.godot
+*.import
+.godot/
+
+# OS generated files
+.DS_Store
+Thumbs.db
