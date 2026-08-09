@@ -17,6 +17,11 @@ const SETTING_SCENE := "site_prospector/prospect_scene"
 const SETTING_CHOSEN := "site_prospector/chosen_site"
 const DEFAULT_SCENE := "res://demo/prospect_demo.tscn"
 const DEFAULT_CHOSEN := "res://chosen_site.tres"
+
+## Per-developer, in `EditorSettings`: a machine's setup, not a project's.
+const ASSISTANT_ENABLED := "site_prospector/assistant/enabled"
+const ASSISTANT_HOST := "site_prospector/assistant/host"
+const ASSISTANT_MODEL := "site_prospector/assistant/model"
 const RENDER_REGION_MAP := \
 	"res://addons/site_prospector/tools/render_region_map.gd"
 
@@ -45,17 +50,57 @@ func _exit_tree() -> void:
 		_dock = null
 
 
-## Declare the settings so they appear in Project Settings rather than having
-## to be guessed at or typed blind.
+## Declare where things live, in the scope each of them belongs to.
+##
+## **Three scopes, and the difference matters.** `ProjectSettings` is committed
+## in `project.godot`, so it holds what every teammate must agree on - which
+## scene is this project's map, where a kept site is written. `EditorSettings`
+## lives in the developer's own config directory and is never committed, so it
+## holds what is true of a *machine* rather than of a project: where a model is
+## running and which one. Putting a host URL in project settings would commit
+## one developer's localhost to everybody else's checkout.
+##
+## `set_as_basic` matters more than it looks: without it a setting only appears
+## once "Advanced Settings" is toggled on, which is where settings go to not be
+## found.
 func _declare_settings() -> void:
 	for setting in [[SETTING_SCENE, DEFAULT_SCENE], [SETTING_CHOSEN,
 			DEFAULT_CHOSEN]]:
 		if not ProjectSettings.has_setting(setting[0]):
 			ProjectSettings.set_setting(setting[0], setting[1])
 		ProjectSettings.set_initial_value(setting[0], setting[1])
+		ProjectSettings.set_as_basic(setting[0], true)
 		ProjectSettings.add_property_info({
 			"name": setting[0], "type": TYPE_STRING,
 			"hint": PROPERTY_HINT_FILE,
+		})
+	_declare_editor_settings()
+
+
+## Per-developer setup, in the editor's own settings rather than the project's.
+##
+## A host URL and a model name describe the machine a designer is sitting at.
+## They are the same across every project that person opens, and they are wrong
+## for everyone else on the team, so `EditorSettings` is their home. A future
+## hosted endpoint's credential belongs in neither: an environment variable,
+## with only its *name* recorded here, because both settings files sit in
+## plain text on disk and one of them is in git.
+func _declare_editor_settings() -> void:
+	var editor := get_editor_interface().get_editor_settings()
+	if editor == null:
+		return
+	var defaults := {
+		ASSISTANT_ENABLED: false,
+		ASSISTANT_HOST: "http://localhost:11434",
+		ASSISTANT_MODEL: "qwen3:8b",
+	}
+	for name in defaults:
+		if not editor.has_setting(name):
+			editor.set_setting(name, defaults[name])
+		editor.set_initial_value(name, defaults[name], false)
+		editor.add_property_info({
+			"name": name,
+			"type": typeof(defaults[name]),
 		})
 
 

@@ -98,6 +98,29 @@ Optionally, **Rank candidate sites** sweeps the whole region and ranks
 rectangles at every angle by contours crossed — the flattest large parcel, the
 way a developer reads a sheet. It takes about a minute and is never required.
 
+## Settings, and where they live
+
+Three scopes, and which one a setting belongs in is a real decision rather
+than a filing preference.
+
+| Home | Scope | Committed | Holds |
+| --- | --- | --- | --- |
+| **Project Settings** | The project | Yes, in `project.godot` | `site_prospector/prospect_scene`, `site_prospector/chosen_site` |
+| **Editor Settings** | The developer, every project | No, in `~/.config` | `site_prospector/assistant/host`, `.../model`, `.../enabled` |
+
+**What every teammate must agree on goes in the project.** Which scene is this
+project's map is a fact about the project, and a checkout without it is broken.
+
+**What describes a machine goes in the editor.** A model host URL and a model
+name are the same across every project that developer opens and wrong for
+everyone else on their team. Committing one person's `localhost:11434` to a
+shared `project.godot` makes the file churn on every machine and be right on
+none of them.
+
+**A credential belongs in neither.** Both settings files are plain text on
+disk and one of them is in git. When hosted endpoints are supported, the key
+comes from an environment variable and only the variable's *name* is recorded.
+
 ## Demo
 
 This repository is a Godot project. Open it, enable the plugin, and
