@@ -67,6 +67,21 @@ const REGION_SIZE := 256
 ## Metres over which the filled board eases back to bare terrain outside it.
 const EDGE_BLEND := 24.0
 
+## Spacing of the landform samples a rebuild takes, in metres.
+##
+## **The rebuild is the editor's frame budget, not a background job.** This is a
+## `@tool` node, so it runs on `_ready` and on every window nudge; sampling the
+## landform once per drawn metre meant 590,000 evaluations of a function that
+## loops over fans, arroyos and two octaves of noise - 4.4 seconds of frozen
+## editor per nudge.
+##
+## Sampled every few metres and interpolated between, because a fan has nothing
+## to say at one-metre resolution that survives being benched anyway. The
+## *built* surface is still exact: seats are read directly, so what objects sit
+## on and what the player walks on are unaffected. Only the wild ground beyond
+## the board is interpolated, and it is scenery.
+const TERRAIN_SAMPLE := 4.0
+
 ## The layers `TerrainBlockout` used, so ground picking keeps hitting ground.
 const GROUND_LAYERS := 1 | 4
 
@@ -80,6 +95,7 @@ var _terrain: Node = null
 var _grader: Node = null
 var _board_origin := Vector2.ZERO
 var _pending := false
+var _rebuild_requested := false
 var _builds := 0
 
 
@@ -139,9 +155,75 @@ func ground_height_at(x: float, z: float) -> float:
 	return lerpf(filled, terrain_h, clampf(outside / EDGE_BLEND, 0.0, 1.0))
 
 
+## The drawn height at a point, using the coarse landform and exact seats.
+##
+## Seats are read directly rather than interpolated: they are what objects are
+## placed on and what the body collides with, so an approximation there would
+## put a house a few centimetres off its own ground. The landform is only ever
+## the wild half of the answer, which is why it can be sampled coarsely.
+func _ground_from(x: float, z: float, coarse: PackedFloat32Array,
+		width: int, step: float, origin: Vector3) -> float:
+	var terrain_h := _sample_coarse(x, z, coarse, width, step, origin)
+	if _grader == null or not _grader.has_method("seat_height_at_cell"):
+		return terrain_h
+	var cell_size := float(_grader.cell_size)
+	var grid: Vector2 = _grader.grid_size
+	if cell_size <= 0.0:
+		return terrain_h
+
+	var out_x := maxf(_board_origin.x - x, x - (_board_origin.x + grid.x * cell_size))
+	var out_z := maxf(_board_origin.y - z, z - (_board_origin.y + grid.y * cell_size))
+	var outside := maxf(maxf(out_x, out_z), 0.0)
+	# Well beyond the board there is no fill to blend, so the seats need not be
+	# read at all - which is most of the image.
+	if outside >= EDGE_BLEND:
+		return terrain_h
+
+	var fx := (x - _board_origin.x) / cell_size - 0.5
+	var fz := (z - _board_origin.y) / cell_size - 0.5
+	var max_x := int(grid.x) - 1
+	var max_z := int(grid.y) - 1
+	var x0 := clampi(int(floorf(fx)), 0, max_x)
+	var z0 := clampi(int(floorf(fz)), 0, max_z)
+	var x1 := mini(x0 + 1, max_x)
+	var z1 := mini(z0 + 1, max_z)
+	var tx := clampf(fx - float(x0), 0.0, 1.0)
+	var tz := clampf(fz - float(z0), 0.0, 1.0)
+	var top := lerpf(_seat(x0, z0), _seat(x1, z0), tx)
+	var bottom := lerpf(_seat(x0, z1), _seat(x1, z1), tx)
+	var filled := lerpf(top, bottom, tz)
+	if outside <= 0.0:
+		return filled
+	return lerpf(filled, terrain_h, clampf(outside / EDGE_BLEND, 0.0, 1.0))
+
+
+func _sample_coarse(x: float, z: float, coarse: PackedFloat32Array,
+		width: int, step: float, origin: Vector3) -> float:
+	var fx := (x - origin.x) / step
+	var fz := (z - origin.z) / step
+	var x0 := clampi(int(fx), 0, width - 2)
+	var z0 := clampi(int(fz), 0, width - 2)
+	var tx := clampf(fx - float(x0), 0.0, 1.0)
+	var tz := clampf(fz - float(z0), 0.0, 1.0)
+	var top := lerpf(coarse[z0 * width + x0], coarse[z0 * width + x0 + 1], tx)
+	var bottom := lerpf(coarse[(z0 + 1) * width + x0],
+		coarse[(z0 + 1) * width + x0 + 1], tx)
+	return lerpf(top, bottom, tz)
+
+
 func _seat(x: int, z: int) -> float:
 	return float(_grader.seat_height_at_cell(Vector2i(x, z)))
 
+
+## Seconds of quiet before a queued rebuild runs.
+##
+## **Dragging a value queues a rebuild per change, not per gesture.**
+## `call_deferred` coalesces within a frame and a slider drag spans hundreds of
+## them, so a rebuild that costs most of a second ran most of a second, over
+## and over, for the whole drag. Waiting for the changes to stop turns that
+## into one rebuild after the gesture - which is also how a designer thinks
+## about it.
+const REBUILD_DEBOUNCE := 0.25
 
 ## `MapBuilder` hands the terrain its grader so drawn ground follows the
 ## grading solve. Re-importing on every solve would be wasteful, so this only
@@ -165,10 +247,26 @@ func set_grader(grader: Node) -> void:
 
 
 func _queue_rebuild() -> void:
-	if _pending or not is_inside_tree():
+	if not is_inside_tree():
+		return
+	_rebuild_requested = true
+	if _pending:
 		return
 	_pending = true
-	call_deferred("_rebuild")
+	_debounce()
+
+
+## Wait for the changes to stop, then rebuild once.
+func _debounce() -> void:
+	while _rebuild_requested:
+		_rebuild_requested = false
+		var timer := get_tree().create_timer(REBUILD_DEBOUNCE)
+		await timer.timeout
+		if not is_inside_tree():
+			_pending = false
+			return
+	_pending = false
+	_rebuild()
 
 
 func _rebuild() -> void:
@@ -207,13 +305,33 @@ func _rebuild() -> void:
 	var needed := maxf(span.x, span.y) + absf(origin.x)
 	var regions := int(ceilf(needed / region_m))
 	var size := maxi(regions, 1) * REGION_SIZE
-	var image := Image.create_empty(size, size, false, Image.FORMAT_RF)
-	for ix in size:
-		for iz in size:
-			var h := ground_height_at(
-				origin.x + float(ix) * VERTEX_SPACING,
-				origin.z + float(iz) * VERTEX_SPACING)
-			image.set_pixel(ix, iz, Color(h, 0.0, 0.0, 1.0))
+
+	# The landform, sampled coarsely once and interpolated for the rest.
+	var coarse_step := maxf(TERRAIN_SAMPLE, VERTEX_SPACING)
+	var coarse_width := int(ceilf(float(size) / coarse_step)) + 2
+	var coarse := PackedFloat32Array()
+	coarse.resize(coarse_width * coarse_width)
+	for iz in coarse_width:
+		for ix in coarse_width:
+			coarse[iz * coarse_width + ix] = height_at(
+				origin.x + float(ix) * coarse_step,
+				origin.z + float(iz) * coarse_step)
+
+	# Built as a buffer rather than by `set_pixel`, which is a scripted call
+	# per pixel and was most of what remained after the landform was cached.
+	# `FORMAT_RF` is one float per pixel, so the array maps straight onto it.
+	var pixels := PackedFloat32Array()
+	pixels.resize(size * size)
+	for iz in size:
+		var z := origin.z + float(iz) * VERTEX_SPACING
+		var row := iz * size
+		for ix in size:
+			pixels[row + ix] = _ground_from(
+				origin.x + float(ix) * VERTEX_SPACING, z,
+				coarse, coarse_width, coarse_step, origin)
+	var image := Image.create_from_data(size, size, false, Image.FORMAT_RF,
+		pixels.to_byte_array())
+
 	var data: Object = _terrain.get("data")
 	# **Clear before importing.** `import_images` fills regions it creates and
 	# leaves regions that already exist alone, so the second import - the one
